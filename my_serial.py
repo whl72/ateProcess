@@ -8,61 +8,62 @@ import serial.tools.list_ports
 import datetime
 from queue import Queue
 
-global myser
-file_name = 'serial_data.txt'
-serial_flag = False
+myser = serial.Serial()
 msg = Queue()
+
+file_name = 'serial_data.txt'
 SERIAL_ID = 'MSG_SERIAL_314'
+
+serial_flag = False
+data = [0] * 2000
 
 
 class SerialProcess:
     def __init__(self, name):
         self.name = name
 
-    def switch_run(self):
+    def cmd_run(self):
         # print(self + ' start\n')
 
         global serial_flag
         while True:
-            flag = input("enter 'close/open' to close/open serial port\n").strip()
-            if flag == 'close':
+            cmd = input("enter 'close/open' to close/open serial port\n").strip()
+            if cmd == 'close' or cmd == 'CLOSE':
                 print('close serial\n')
                 serial_flag = False
-                myser.close()
-            elif flag == 'open':
-                print('open serial\n')
-                myser.open()
-                serial_flag = True
-            elif flag == 'exit':
+                # myser.close()
+                SerialProcess.close_serial()
+            elif cmd == 'open' or cmd == 'OPEN':
+                port_list = list(serial.tools.list_ports.comports())
+                if len(port_list) <= 0:
+                    print("serial port can't find!")
+                else:
+                    print("===============alive serial port as below=================")
+                    for item in port_list:
+                        print(item)
+                    print("==========================================================")
+                com_number = input('please select a serial port.\n')
+                result = SerialProcess.is_right_port(com_number)
+                if result:
+                    SerialProcess.open_serial(com_number, 115200)
+                    print('open serial\n')
+                    serial_flag = True
+                else:
+                    print('please enter right port number!')
+            elif cmd == 'exit':
                 print('exit serial\n')
             else:
                 print('unknown command!\n')
 
     def serial_run(self):
-        # print(self + ' start\n')
-        global myser
+        global data
 
-        port_list = list(serial.tools.list_ports.comports())
-        if len(port_list) <= 0:
-            print("serial port can't find!")
-        else:
-            print("serial is ready!")
-            for item in port_list:
-                print(item)
-
-        # the serial port should be COM4
-        # print(port_list[1][0])
-        # myser = serial.Serial(port_list[1][0], 115200, timeout=60)
-        # if myser.isOpen():
-        #     print("open success")
-        # else:
-        #     print("open failed")
-        #
         while True:
             if serial_flag:
                 data = myser.readline()
                 if data != b'':
-                    data = data.decode()
+                    # should ignore decode errors, or it will crash
+                    data = data.decode('utf-8', errors='ignore')
                     data = data.strip()
                     data = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '  ' + data
                     print(data)
@@ -93,6 +94,15 @@ class SerialProcess:
         global myser, serial_flag
         serial_flag = False
         myser.close()
+
+    @staticmethod
+    def is_right_port(ser_port):
+        port_list = list(serial.tools.list_ports.comports())
+        for item in port_list:
+            if ser_port in item:
+                return True
+
+        return False
 
 
 def store_serial_data(data):
