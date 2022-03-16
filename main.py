@@ -5,16 +5,16 @@
 
 import threading
 import my_serial
-import time
+import shell
 
 
 serial_port = my_serial.SerialProcess
 
 
 if __name__ == '__main__':
-    closeThread = threading.Thread(target=serial_port.cmd_run, args=("CloseThread",))
+    shell_cmd = threading.Thread(target=shell.AteShell.cmd_run, args=("ShellThread",))
     serialThread = threading.Thread(target=serial_port.serial_run, args=("SerialThread",))
 
-    closeThread.start()
+    shell_cmd.start()
     serialThread.start()
     serialThread.join(timeout=0.01)

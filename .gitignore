@@ -1,0 +1,17 @@
+
+# Compiled  file
+*.o
+*.bin
+*.sim
+*.out
+*.cout
+*.hex
+*.txt
+
+# build output file
+*.dep
+*.pbi
+
+# sys file
+*.bat
+*.TMP
