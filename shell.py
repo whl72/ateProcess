@@ -38,10 +38,16 @@ class AteShell:
                 print('exit serial\n')
             elif cmd == 'runate' or cmd == 'RUNATE':
                 print('start run ate.\n')
-                if AteProcess.temperature_station():
+                # AteProcess.test_func(AteProcess)
+                if AteProcess().temperature_station():
                     print('temperature station success.\n')
                 else:
                     print('temperature station fail.\n')
+
+                if AteProcess().bft_station():
+                    print('bft station success.\n')
+                else:
+                    print('bft station fail.\n')
             elif cmd == '':
                 print("shell.")
             else:

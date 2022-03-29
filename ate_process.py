@@ -4,10 +4,15 @@
 # -----------------------------------------------------------------------------------------------------
 
 import time
+import re
+from record_mem import RecordMemory
 from my_serial import SerialProcess
 from my_serial import msg
 from my_serial import SERIAL_ID
 
+ERR_VALUE = 0xffff
+
+# temperature station
 FT_ON = '[FM,FT_ON]'
 MEM_ERASE = '[FM,ERASE_MEM]'
 SYS_REBOOT = '[FM,REBOOT_SYS]'
@@ -23,6 +28,19 @@ RESP_TEMP_CALCULATE = '[FM,TEMP_C,1]'
 RESP_TEMP_OFFSET = '[FW,TEMP_OFFSET,'
 RESP_TEMP_GET = '[FM,TEMP_G,1]'
 RESP_TEMP_VALUE = '[FM,TEMP_G,1]'
+RESP_HW_SET = '[FM,HWVER_S,1]'
+RESP_HW_GET = '[FM,HWVER_G,1]'
+RESP_HW_VALUE = '[FM,HWVER_R,'
+
+# BFT station
+VDC_C = '[FM,VDC_C]'
+VEDLC_C = '[FM,VEDLC_C]'
+SETTINGS_G = '[FM,SETTINGS_G]'
+
+VDC_R = '[FM,VDC_C,1]'
+VEDLC_R = '[FM,VEDLC_C,1]'
+RESP_SETTINGS_G = '[FM,SETTINGS_R,I]'
+SETTINGS_R = '[FM,SETTINGS_R,'
 
 # ----------------  fail log ----------------------------  command  ----  response   -------------- timeout - retry - #
 ate_framework = [
@@ -33,17 +51,23 @@ ate_framework = [
                     ['temp get fail!\n',                    TEMP_GET,       RESP_TEMP_GET,              3,      3],
                 ]
 
-class AteProcess:
-    def __init__(self, name):
-        self.name = name
 
-    @staticmethod
-    def send_cmd(cmd):
+class AteProcess:
+    def __init__(self):
+        self.software_ver = []
+        self.hardware_ver = []
+        self.imei = []
+        self.ccid = []
+        self.imsi = []
+        self.modem_hw_ver = []
+        self.modem_sw_ver = []
+        self.ctcid = []
+
+    def send_cmd(self, cmd):
         print(cmd)
         SerialProcess.send_data(cmd.encode())
 
-    @staticmethod
-    def check_response(resp, tm_out):
+    def check_response(self, resp, tm_out):
         # clear message queue to avoid receive old data.
         msg.queue.clear()
 
@@ -52,27 +76,25 @@ class AteProcess:
         except:
             print('queue empty')
             return False
-        if not SERIAL_ID in data_response:
+        if SERIAL_ID not in data_response:
             return False
         data_response = data_response.lstrip(SERIAL_ID).strip()
-        print('\nexpect resp : ' + resp + '  fact resp : ' + data_response.lstrip(SERIAL_ID) + '\n')
         if resp == data_response:
             return True
         else:
-            # print('\nexpect resp : ' + resp + '  fact resp : ' + data_response.lstrip(SERIAL_ID) + '\n')
+            print('\nexpect resp : ' + resp + '  fact resp : ' + data_response.lstrip(SERIAL_ID) + '\n')
             return False
 
-    @staticmethod
-    def launch_ate(start_cmd_item, redo, redo_delay, total_cmd_num):
+    def launch_ate(self, start_cmd_item, redo, redo_delay, total_cmd_num):
         index = start_cmd_item
         cmds = total_cmd_num
 
         for i in range(cmds):
             index += i
             for retry in range(redo):
-                AteProcess.send_cmd(ate_framework[index][1])
+                self.send_cmd(ate_framework[index][1])
                 SerialProcess.switch_queue_flag(True)
-                result = AteProcess.check_response(ate_framework[index][2], ate_framework[index][3])
+                result = self.check_response(ate_framework[index][2], ate_framework[index][3])
                 if result:
                     index = start_cmd_item
                     # must delay 1 second to send next command
@@ -86,51 +108,211 @@ class AteProcess:
         SerialProcess.switch_queue_flag(False)
         return True
 
-    @staticmethod
-    def temperature_station():
-        # AteProcess.send_cmd(FT_ON)
-        # if not AteProcess.check_response(RESP_FT_ON, 3):
-        #     print('enter FT mode fail!!!\n')
-        #     return False
-        # AteProcess.send_cmd(MEM_ERASE)
-        # if not AteProcess.check_response(RESP_MEM_ERASE, 3):
-        #     print('memory bank erase fail!!!\n')
+    def get_response_value(self, resp, tm_out, is_str):
+        # clear message queue to avoid receive old data.
+        msg.queue.clear()
 
-        # for i in range(3):
-        #     AteProcess.send_cmd(ate_framework[i][1])
-        #     if not AteProcess.check_response(ate_framework[i][2], ate_framework[i][3]):
-        #         print(ate_framework[i][0])
-        #         return False
+        try:
+            value_response = msg.get(timeout=tm_out)
+        except:
+            print('queue empty\n')
+            return ERR_VALUE
 
-        # time.sleep(10)
-        # AteProcess.send_cmd(FT_ON)
-        # if not AteProcess.check_response(RESP_FT_ON, 5):
-        #     print('enter FT mode fail!!!\n')
-        #     return False
-        #
-        # index = 3
-        # for i in range(2):
-        #     index += i
-        #     for retry in range(ate_framework[index][4]):
-        #         AteProcess.send_cmd(ate_framework[index][1])
-        #         if not AteProcess.check_response(ate_framework[index][2], ate_framework[index][3]) and \
-        #                 retry == ate_framework[index][4] - 1:
-        #             print(ate_framework[index][0])
-        #             return False
+        value_response = value_response.lstrip(SERIAL_ID).strip()
+        if resp == value_response:
+            try:
+                value_response = msg.get(timeout=tm_out)
+                # print('msg2 = ' + value_response)
+            except:
+                print('queue empty\n')
+                return ERR_VALUE
+            if not is_str:
+                value_response = value_response.lstrip(SERIAL_ID).strip()
+                r_value = re.sub("\D", "", value_response)
+                if '-' in value_response:
+                    rst = int(r_value) * (-1)
+                else:
+                    rst = int(r_value)
+                return rst
+            else:
+                # [FM,HWVER_R,A0] to FM,HWVER_R,A0
+                value_response = value_response.strip(']' + '[')
+                # ['FM', 'HWVER_R', 'A0']
+                rst = value_response.split(',')
+                # delete 'FM' 'HWVER_R'
+                return rst[2:]
 
-        if not AteProcess.launch_ate(start_cmd_item=0, redo=3, redo_delay=2, total_cmd_num=3):
+        else:
+            return ERR_VALUE
+
+    def temperature_station(self):
+        # create memory bank xml file
+        RecordMemory.create_xml()
+
+        # 1.enter FT mode 2.erase memory bank 3.reboot system
+        if not self.launch_ate(start_cmd_item=0, redo=3, redo_delay=2, total_cmd_num=3):
+            return False
+        # waiting for system reboot
+        time.sleep(15)
+        # enter FT mode
+        if not self.launch_ate(start_cmd_item=0, redo=5, redo_delay=2, total_cmd_num=1):
             return False
 
-        time.sleep(10)
+        # 1.temperature calibration 2.read temperature
+        time.sleep(2)
+        self.send_cmd(TEMP_CALCULATE)
+        SerialProcess.switch_queue_flag(True)
+        t_offset = self.get_response_value(resp=RESP_TEMP_CALCULATE, tm_out=3, is_str=False)
+        if ERR_VALUE != t_offset:
+            RecordMemory.update_item_xml('Toffset', t_offset)
+            rst = True
+        else:
+            print('temperature calibration fail!!!\n')
+            rst = False
 
-        if not AteProcess.launch_ate(start_cmd_item=0, redo=5, redo_delay=2, total_cmd_num=1):
-            return False
-        if not AteProcess.launch_ate(start_cmd_item=3, redo=3, redo_delay=2, total_cmd_num=2):
+        if rst:
+            time.sleep(2)
+            self.send_cmd(TEMP_GET)
+            SerialProcess.switch_queue_flag(True)
+            t_value = self.get_response_value(resp=RESP_TEMP_GET, tm_out=3, is_str=False)
+            if (ERR_VALUE != t_value) and (t_value == 20):
+                rst = True
+            else:
+                print('temperature get value fail!!!\n')
+                rst = False
+
+        SerialProcess.switch_queue_flag(False)
+        return rst
+
+    def vdc_vedlc_check(self, v_resp, vcc_h, vcc_l, v_tmout):
+        v_value = self.get_response_value(resp=v_resp, tm_out=v_tmout, is_str=False)
+        if ERR_VALUE != v_value:
+            if vcc_h > int(v_value) > vcc_l:
+                return True
+            else:
+                return False
+        else:
             return False
 
-        return True
+    def get_board_information(self):
+        self.send_cmd(SETTINGS_G)
+        SerialProcess.switch_queue_flag(True)
+        # clear message queue to avoid receive old data.
+        msg.queue.clear()
+
+        try:
+            response = msg.get(timeout=20)
+            # print('msg1 = ' + response)
+        except:
+            print('queue empty\n')
+            return False
+
+        response = response.lstrip(SERIAL_ID).strip()
+        if response == RESP_SETTINGS_G:
+            try:
+                value_response = msg.get(timeout=2)
+                # print('msg2 = ' + value_response)
+            except:
+                print('queue empty\n')
+                return False
+            if SETTINGS_R in value_response:
+                value_response = value_response.lstrip(SERIAL_ID + SETTINGS_R).strip()
+                infor_buff = value_response.split(',')
+                # print(infor_buff)
+                self.software_ver = infor_buff[0]
+                self.hardware_ver = infor_buff[1]
+                self.imei = infor_buff[2]
+                self.ccid = infor_buff[3]
+                self.imsi = infor_buff[4]
+                self.modem_hw_ver = infor_buff[5]
+                self.modem_sw_ver = infor_buff[6]
+                self.ctcid = infor_buff[7]
+                RecordMemory.update_item_xml('HardwareRevision', self.hardware_ver)
+                RecordMemory.update_item_xml('IMEI', self.imei)
+                RecordMemory.update_item_xml('Version', self.modem_hw_ver + self.modem_sw_ver)
+                RecordMemory.update_item_xml('UniqueId', self.ctcid)
+                return True
+            else:
+                return False
+        else:
+            return False
 
     def bft_station(self):
-        res = False
+        rst = False
 
-        return res
+        # enter FT mode
+        for retry in range(3):
+            self.send_cmd(FT_ON)
+            SerialProcess.switch_queue_flag(True)
+            result = self.check_response(RESP_FT_ON, 3)
+            if result:
+                rst = True
+                break
+            elif not result and retry == 2:
+                SerialProcess.switch_queue_flag(False)
+            time.sleep(1)
+
+        # set hardware version
+        if rst:
+            time.sleep(2)
+            self.send_cmd(HW_SET)
+            SerialProcess.switch_queue_flag(True)
+            result = self.check_response(RESP_HW_SET, 3)
+            if result:
+                self.send_cmd(HW_GET)
+                hw = self.get_response_value(resp=RESP_HW_GET, tm_out=3, is_str=False)
+                if ERR_VALUE != hw:
+                    rst = True
+                else:
+                    print('temperature calibration fail!!!\n')
+                    rst = False
+            else:
+                rst = False
+
+        # check vdc
+        if rst:
+            time.sleep(2)
+            self.send_cmd(VDC_C)
+            if self.vdc_vedlc_check(v_resp=VDC_R, vcc_h=26000, vcc_l=23000, v_tmout=15):
+                rst = True
+            else:
+                print('vdc check fail!!!\n')
+                rst = False
+
+        # check vedlc
+        if rst:
+            time.sleep(2)
+            self.send_cmd(VEDLC_C)
+            if self.vdc_vedlc_check(v_resp=VEDLC_R, vcc_h=4000, vcc_l=3500, v_tmout=3):
+                rst = True
+            else:
+                rst = False
+                print('vedlc check fail.\n')
+
+        # get board information
+        if rst:
+            time.sleep(2)
+            if self.get_board_information():
+                rst = True
+            else:
+                rst = False
+
+        return rst
+
+    def test_func(self):
+        if 1:
+            if not self.launch_ate(start_cmd_item=0, redo=5, redo_delay=2, total_cmd_num=1):
+                return False
+
+            SerialProcess.switch_queue_flag(True)
+            # 1.temperature calibration 2.read temperature
+            self.send_cmd(TEMP_CALCULATE)
+            t_offset = self.get_response_value(resp=RESP_TEMP_CALCULATE, tm_out=3, is_str=False)
+            if ERR_VALUE != t_offset:
+                RecordMemory.update_item_xml('Toffset', t_offset)
+                rst = True
+            else:
+                print('vdc check fail!!!\n')
+                rst = False
+
+            return True

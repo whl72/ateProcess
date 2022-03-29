@@ -76,17 +76,6 @@ class SerialProcess:
                         # print('send msg queue.\n')
                         msg.put(SERIAL_ID + data)
 
-        # while True:
-        #     if serial_flag:
-        #         while myser.inWaiting() > 0:
-        #             data = ''
-        #             data = myser.readline(myser.inWaiting())
-        #             data = data.decode('utf-8', errors='ignore').strip()
-        #             print(data)
-        #
-        #             if SerialProcess.get_queue_flag() == True:
-        #                 msg.put(SERIAL_ID + data)
-
     @staticmethod
     def get_current_ports():
         port_list = list(serial.tools.list_ports.comports())
