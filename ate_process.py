@@ -12,14 +12,34 @@ from my_serial import SERIAL_ID
 
 ERR_VALUE = 0xffff
 
+TEMP_VAL = 25
+SW_REGIME_VAL = 0
+HW_STR = 'D2'
+
 # temperature station
 FT_ON = '[FM,FT_ON]'
 MEM_ERASE = '[FM,ERASE_MEM]'
 SYS_REBOOT = '[FM,REBOOT_SYS]'
-TEMP_CALCULATE = '[FM,TEMP_C,20]'
+TEMP_CALCULATE = '[FM,TEMP_C,' + str(TEMP_VAL) + ']'
 TEMP_GET = '[FM,TEMP_G]'
-HW_SET = '[FM,HWVER_S,A0]'
+HW_SET = '[FM,HWVER_S,' + HW_STR + ']'
 HW_GET = '[FM,HWVER_G]'
+LED_ON = '[FM,LED_C,1]'
+LED_OFF = '[FM,LED_C,0]'
+RF_TEST = '[FM,RF_ON]'
+MB_UNLOCK = '[FM,MB_UNLOCK]'
+MB_10NC_SET = '[FM,MB_10NC_S,9137010576]'
+MB_NAME_SET = '[FM,MB_NAME_S,LLC7852]'
+MB_DATE_S = '[FM,MB_DATE_S,20221213]'
+MB_SW_REGIME_S = '[FM,SW_REGIME_S,' + str(SW_REGIME_VAL) + ']'
+MB_LUXLV_ON_S = '[FM,LUXLV_ON_S,30]'
+MB_LUXLV_OFF_S = '[FM,LUXLV_OFF_S,10]'
+MB_DIM_S = '[FM,DIM_S,0]'
+MB_AS_SUNRISEA_S = '[FM,AS_SUNRISEA_S,12]'
+MB_AS_SUNSETA_S = '[FM,AS_SUNSETA_S,13]'
+MB_AS_TMSUNRISE_S = '[FM,AS_TMSUNRISE_S,22]'
+MB_AS_TMSUNSET_S = '[FM,AS_TMSUNSET_S,23]'
+
 
 RESP_FT_ON = '[FM,FT_ON,1]'
 RESP_MEM_ERASE = '[FM,ERASE_MEM,1]'
@@ -31,6 +51,7 @@ RESP_TEMP_VALUE = '[FM,TEMP_G,1]'
 RESP_HW_SET = '[FM,HWVER_S,1]'
 RESP_HW_GET = '[FM,HWVER_G,1]'
 RESP_HW_VALUE = '[FM,HWVER_R,'
+RESP_LED_C = '[FM,LED_C,1]'
 
 # BFT station
 VDC_C = '[FM,VDC_C]'
@@ -39,8 +60,13 @@ SETTINGS_G = '[FM,SETTINGS_G]'
 
 VDC_R = '[FM,VDC_C,1]'
 VEDLC_R = '[FM,VEDLC_C,1]'
-RESP_SETTINGS_G = '[FM,SETTINGS_R,I]'
+RESP_SETTINGS_G = '[FM,SETTINGS_R,L]'
 SETTINGS_R = '[FM,SETTINGS_R,'
+DALI_TOOL_RESP_SETTINGS_G = '[FM,SETTINGS_G,1]'
+DALI_TOOL_RESP_RF_ON = '[FM,RF_ON,1]'
+DALI_TOOL_RESP_RESULT_RF = '[FM,RF_ON_R,1]'
+
+REBOOT_START_INFOR = 'debug init success'
 
 # ----------------  fail log ----------------------------  command  ----  response   -------------- timeout - retry - #
 ate_framework = [
@@ -84,6 +110,23 @@ class AteProcess:
         else:
             print('\nexpect resp : ' + resp + '  fact resp : ' + data_response.lstrip(SERIAL_ID) + '\n')
             return False
+
+
+    def check_key_str(self, target_str, try_times, tm_out):
+        # clear message queue to avoid receive old data.
+        msg.queue.clear()
+
+        reboot_infor = []
+        for retry in range(try_times):
+            try:
+                reboot_infor = msg.get(timeout=tm_out)
+            except:
+                print('queue empty')
+
+            print('receive reboot infor\n')
+            if target_str in reboot_infor:
+                return True
+
 
     def launch_ate(self, start_cmd_item, redo, redo_delay, total_cmd_num):
         index = start_cmd_item
@@ -140,7 +183,7 @@ class AteProcess:
                 # ['FM', 'HWVER_R', 'A0']
                 rst = value_response.split(',')
                 # delete 'FM' 'HWVER_R'
-                return rst[2:]
+                return rst[2]
 
         else:
             return ERR_VALUE
@@ -153,7 +196,11 @@ class AteProcess:
         if not self.launch_ate(start_cmd_item=0, redo=3, redo_delay=2, total_cmd_num=3):
             return False
         # waiting for system reboot
-        time.sleep(15)
+        # time.sleep(15)
+        SerialProcess.switch_queue_flag(True)
+        if not self.check_key_str(target_str=REBOOT_START_INFOR, try_times=5, tm_out=10):
+            return False
+        time.sleep(1)
         # enter FT mode
         if not self.launch_ate(start_cmd_item=0, redo=5, redo_delay=2, total_cmd_num=1):
             return False
@@ -175,7 +222,7 @@ class AteProcess:
             self.send_cmd(TEMP_GET)
             SerialProcess.switch_queue_flag(True)
             t_value = self.get_response_value(resp=RESP_TEMP_GET, tm_out=3, is_str=False)
-            if (ERR_VALUE != t_value) and (t_value == 20):
+            if (ERR_VALUE != t_value) and ((TEMP_VAL - 2) <= t_value <= (TEMP_VAL + 2)):
                 rst = True
             else:
                 print('temperature get value fail!!!\n')
@@ -201,7 +248,7 @@ class AteProcess:
         msg.queue.clear()
 
         try:
-            response = msg.get(timeout=20)
+            response = msg.get(timeout=50)
             # print('msg1 = ' + response)
         except:
             print('queue empty\n')
@@ -216,9 +263,8 @@ class AteProcess:
                 print('queue empty\n')
                 return False
             if SETTINGS_R in value_response:
-                value_response = value_response.lstrip(SERIAL_ID + SETTINGS_R).strip()
+                value_response = value_response.lstrip(SERIAL_ID + SETTINGS_R).strip('[').strip(']')
                 infor_buff = value_response.split(',')
-                # print(infor_buff)
                 self.software_ver = infor_buff[0]
                 self.hardware_ver = infor_buff[1]
                 self.imei = infor_buff[2]
@@ -260,11 +306,11 @@ class AteProcess:
             result = self.check_response(RESP_HW_SET, 3)
             if result:
                 self.send_cmd(HW_GET)
-                hw = self.get_response_value(resp=RESP_HW_GET, tm_out=3, is_str=False)
-                if ERR_VALUE != hw:
+                hw = self.get_response_value(resp=RESP_HW_GET, tm_out=3, is_str=True)
+                if ERR_VALUE != hw and HW_STR == str(hw):
                     rst = True
                 else:
-                    print('temperature calibration fail!!!\n')
+                    print('HW ver is error!!!\n')
                     rst = False
             else:
                 rst = False
@@ -299,20 +345,153 @@ class AteProcess:
 
         return rst
 
-    def test_func(self):
-        if 1:
-            if not self.launch_ate(start_cmd_item=0, redo=5, redo_delay=2, total_cmd_num=1):
-                return False
 
+    def led_check(self):
+        rst = False
+        self.send_cmd(LED_ON)
+        if(self.check_response(RESP_LED_C, 1)):
+            time.sleep(5)
+            self.send_cmd(LED_OFF)
+            if(self.check_response(RESP_LED_C, 1)):
+                rst = True
+            else:
+                rst = False
+        else:
+            rst = False
+
+        return rst
+
+    def dali_tool_get_board_info(self):
+        self.send_cmd(SETTINGS_G)
+        SerialProcess.switch_queue_flag(True)
+        # clear message queue to avoid receive old data.
+        msg.queue.clear()
+
+        try:
+            response = msg.get(timeout=60)
+            # print('msg1 = ' + response)
+        except:
+            print('queue empty\n')
+            return False
+
+        response = response.lstrip(SERIAL_ID).strip()
+        if response == DALI_TOOL_RESP_SETTINGS_G:
+            try:
+                value_response = msg.get(timeout=2)
+                # print('msg2 = ' + value_response)
+            except:
+                print('queue empty\n')
+                return False
+            if SETTINGS_R in value_response:
+                value_response = value_response.lstrip(SERIAL_ID + SETTINGS_R).strip('[').strip(']')
+                infor_buff = value_response.split(',')
+                self.software_ver = infor_buff[0]
+                self.hardware_ver = infor_buff[1]
+                self.imei = infor_buff[2]
+                self.ccid = infor_buff[3]
+                return True
+            else:
+                return False
+        else:
+            return False
+
+    def dali_tool_settings_g(self):
+        rst = False
+
+        # enter FT mode
+        for retry in range(3):
+            self.send_cmd(FT_ON)
             SerialProcess.switch_queue_flag(True)
-            # 1.temperature calibration 2.read temperature
-            self.send_cmd(TEMP_CALCULATE)
-            t_offset = self.get_response_value(resp=RESP_TEMP_CALCULATE, tm_out=3, is_str=False)
-            if ERR_VALUE != t_offset:
-                RecordMemory.update_item_xml('Toffset', t_offset)
+            result = self.check_response(RESP_FT_ON, 5)
+            if result:
+                rst = True
+                break
+            elif not result and retry == 2:
+                SerialProcess.switch_queue_flag(False)
+            time.sleep(1)
+
+        time.sleep(1)
+        if rst:
+            for retry in range(3):
+                if self.dali_tool_get_board_info():
+                    rst = True
+                    break
+                else:
+                    rst = False
+
+        return rst
+
+
+    def dali_tool_rf_test(self):
+        rst = False
+
+        self.send_cmd(RF_TEST)
+        if(self.check_response(DALI_TOOL_RESP_RF_ON, 3)):
+            if(self.check_response(DALI_TOOL_RESP_RESULT_RF, 40)):
+                rst = True
+            else:
+                rst = False
+        else:
+            rst = False
+
+        return rst
+
+
+    def dali_tool_mem_set(self):
+        rst = False
+
+        # enter FT mode
+        SerialProcess.switch_queue_flag(True)
+        for retry in range(3):
+            self.send_cmd(FT_ON)
+            result = self.check_response(RESP_FT_ON, 5)
+            if result:
+                rst = True
+                break
+            elif not result and retry == 2:
+                SerialProcess.switch_queue_flag(False)
+            time.sleep(1)
+
+        time.sleep(1)
+        if rst:
+            self.send_cmd(MB_UNLOCK)
+            result = self.check_response(RESP_FT_ON, 5)
+
+        return rst
+
+
+    def test_func(self):
+
+        # if 0:
+        #     if not self.launch_ate(start_cmd_item=0, redo=5, redo_delay=2, total_cmd_num=1):
+        #         return False
+        #
+        #     SerialProcess.switch_queue_flag(True)
+        #     # 1.temperature calibration 2.read temperature
+        #     self.send_cmd(TEMP_CALCULATE)
+        #     t_offset = self.get_response_value(resp=RESP_TEMP_CALCULATE, tm_out=3, is_str=False)
+        #     if ERR_VALUE != t_offset:
+        #         RecordMemory.update_item_xml('Toffset', t_offset)
+        #         rst = True
+        #     else:
+        #         print('vdc check fail!!!\n')
+        #         rst = False
+        #
+        #     return True
+
+        if 0:
+            RecordMemory.create_xml()
+            RecordMemory.update_item_xml('Toffset', '24')
+
+            return True
+
+        if 1:
+            rst = False
+            self.send_cmd(VDC_C)
+            if self.vdc_vedlc_check(v_resp=VDC_R, vcc_h=26000, vcc_l=23000, v_tmout=15):
                 rst = True
             else:
                 print('vdc check fail!!!\n')
                 rst = False
 
-            return True
+            return rst

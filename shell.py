@@ -2,6 +2,7 @@
 # author by hailong.wang
 # date at 2021.8.10
 # -----------------------------------------------------------------------------------------------------
+import time
 
 import serial
 from my_serial import SerialProcess
@@ -38,7 +39,6 @@ class AteShell:
                 print('exit serial\n')
             elif cmd == 'runate' or cmd == 'RUNATE':
                 print('start run ate.\n')
-                # AteProcess.test_func(AteProcess)
                 if AteProcess().temperature_station():
                     print('temperature station success.\n')
                 else:
@@ -48,6 +48,25 @@ class AteShell:
                     print('bft station success.\n')
                 else:
                     print('bft station fail.\n')
+
+                if AteProcess().led_check():
+                    print('led check success.\n')
+                else:
+                    print('led check fail.\n')
+            elif cmd == 'rundaliate' or cmd == 'RUNDALIATE':
+                print('start run dali tool ate.\n')
+                if AteProcess().dali_tool_settings_g():
+                    print('dali ate success.\n')
+                else:
+                    print('dali ate fail.\n')
+                time.sleep(2)
+                if AteProcess().dali_tool_rf_test():
+                    print('rf test success.\n')
+                else:
+                    print('rf test fail.\n')
+            elif cmd == 'testate' or cmd == 'TESTATE':
+                print('start test ate.\n')
+                AteProcess().test_func()
             elif cmd == '':
                 print("shell.")
             else:

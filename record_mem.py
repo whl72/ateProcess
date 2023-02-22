@@ -16,6 +16,8 @@ class RecordMemory:
         doc = Document()
         # root content
         commbox = doc.createElement('CommBox')
+        commbox.setAttribute('xmlns:i', 'http://www.w3.org/2001/XMLSchema-instance')
+        commbox.setAttribute('xmlns', 'http://schemas.citytouch.com/FactoryLink/v1.0')
         doc.appendChild(commbox)
         # unique ID
         uniqueid = doc.createElement('UniqueId')
@@ -99,7 +101,8 @@ class RecordMemory:
         sw_regime.appendChild(sw_regime_value)
 
         filename = 'commbox.xml'
-        f = open(filename, "w")
+        f = open(filename, 'w')
+
         f.write(doc.toprettyxml(indent="  "))
         f.close()
 
@@ -114,5 +117,5 @@ class RecordMemory:
         # print(element[0].firstChild.data)
 
         with open(COMM_BOX_XML_FILE, 'w') as f:
-            domTree.writexml(f, addindent=' ', encoding='utf-8')
+            domTree.writexml(f, indent='', addindent='', encoding='utf-8')
 
