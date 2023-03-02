@@ -8,6 +8,14 @@ import serial
 from my_serial import SerialProcess
 from ate_process import AteProcess
 
+shell_cmd = [
+    'open -- list all available serial port and chose which port to open.',
+    'close -- close opened serial port.',
+    'runate -- auto run board ate.',
+    'rundaliate -- auto run finish goods ate.',
+    'testate -- authors test command.',
+]
+
 class AteShell:
     def cmd_run(self):
         print("please type a command.\n")
@@ -71,6 +79,9 @@ class AteShell:
                 print('dali ate is finished.\n')
             elif cmd == '':
                 print("shell.")
+            elif cmd == 'help':
+                for cmds in shell_cmd:
+                    print(cmds)
             else:
                 print('unknown command!\n')
 
