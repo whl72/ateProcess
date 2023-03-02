@@ -7,6 +7,8 @@
 *.cout
 *.hex
 *.txt
+*.xml
+*.ui
 
 # build output file
 *.dep
@@ -15,3 +17,9 @@
 # sys file
 *.bat
 *.TMP
+*.spec
+
+# folder
+__pycache__/
+build/
+dist/
