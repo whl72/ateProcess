@@ -15,7 +15,7 @@ class RecordMemory:
     def create_xml():
         doc = Document()
         # root content
-        commbox = doc.createElement('CommBox')
+        commbox = doc.createElement('CommBox\n')
         commbox.setAttribute('xmlns:i', 'http://www.w3.org/2001/XMLSchema-instance')
         commbox.setAttribute('xmlns', 'http://schemas.citytouch.com/FactoryLink/v1.0')
         doc.appendChild(commbox)
@@ -50,7 +50,7 @@ class RecordMemory:
         product_week_value = doc.createTextNode('null')
         product_week.appendChild(product_week_value)
         # product location
-        product_location = doc.createElement('ProductionWeek')
+        product_location = doc.createElement('ProductionLocation')
         commbox.appendChild(product_location)
         product_location_value = doc.createTextNode('null')
         product_location.appendChild(product_location_value)

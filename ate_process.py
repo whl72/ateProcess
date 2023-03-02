@@ -2,7 +2,7 @@
 # author by hailong.wang
 # date at 2022.3.9
 # -----------------------------------------------------------------------------------------------------
-
+import datetime
 import time
 import re
 from record_mem import RecordMemory
@@ -12,11 +12,16 @@ from my_serial import SERIAL_ID
 
 ERR_VALUE = 0xffff
 
+# value to write
 TEMP_VAL = 25
 SW_REGIME_VAL = 0
-HW_STR = 'D2'
+HW_STR = 'C2'
+TEN_NC = '9137010433'
+PRODUCT_NAME = 'LLC7850'
+# PRODUCE_DATE = '20230223'
+DIMMING_INTERFACE = '0'
 
-# temperature station
+# set command
 FT_ON = '[FM,FT_ON]'
 MEM_ERASE = '[FM,ERASE_MEM]'
 SYS_REBOOT = '[FM,REBOOT_SYS]'
@@ -28,19 +33,29 @@ LED_ON = '[FM,LED_C,1]'
 LED_OFF = '[FM,LED_C,0]'
 RF_TEST = '[FM,RF_ON]'
 MB_UNLOCK = '[FM,MB_UNLOCK]'
-MB_10NC_SET = '[FM,MB_10NC_S,9137010576]'
-MB_NAME_SET = '[FM,MB_NAME_S,LLC7852]'
-MB_DATE_S = '[FM,MB_DATE_S,20221213]'
+MB_COMMIT = '[FM,MB_COMMIT]'
+MB_10NC_SET = '[FM,MB_10NC_S,' + TEN_NC + ']'
+MB_NAME_SET = '[FM,MB_NAME_S,' + PRODUCT_NAME + ']'
+# MB_DATE_S = '[FM,MB_DATE_S,' + PRODUCE_DATE + ']'
 MB_SW_REGIME_S = '[FM,SW_REGIME_S,' + str(SW_REGIME_VAL) + ']'
 MB_LUXLV_ON_S = '[FM,LUXLV_ON_S,30]'
 MB_LUXLV_OFF_S = '[FM,LUXLV_OFF_S,10]'
-MB_DIM_S = '[FM,DIM_S,0]'
+MB_DIM_S = '[FM,DIM_S,' + DIMMING_INTERFACE + ']'
 MB_AS_SUNRISEA_S = '[FM,AS_SUNRISEA_S,12]'
 MB_AS_SUNSETA_S = '[FM,AS_SUNSETA_S,13]'
 MB_AS_TMSUNRISE_S = '[FM,AS_TMSUNRISE_S,22]'
 MB_AS_TMSUNSET_S = '[FM,AS_TMSUNSET_S,23]'
+# get command
+MB_10NC_GET = '[FM,MB_10NC_G]'
+MB_NAME_GET = '[FM,MB_NAME_G]'
+MB_DATE_GET = '[FM,MB_DATE_G]'
+MB_SW_REGIME_GET = '[FM,SW_REGIME_G]'
+MB_DIM_GET = '[FM,DIM_G]'
+MB_MD_VER_GET = '[FM,MD_VER_G]'
+MB_FW_VER_GET = '[FM,FW_VER_G]'
+LUX_GAIN_OFFSET_GET = '[FM,LUX_GAIN_G]'
 
-
+# response command
 RESP_FT_ON = '[FM,FT_ON,1]'
 RESP_MEM_ERASE = '[FM,ERASE_MEM,1]'
 RESP_SYS_REBOOT = '[FM,REBOOT_SYS,1]'
@@ -48,10 +63,22 @@ RESP_TEMP_CALCULATE = '[FM,TEMP_C,1]'
 RESP_TEMP_OFFSET = '[FW,TEMP_OFFSET,'
 RESP_TEMP_GET = '[FM,TEMP_G,1]'
 RESP_TEMP_VALUE = '[FM,TEMP_G,1]'
+RESP_MB_DATE_SET = '[FM,MB_DATE_S,1]'
+RESP_MB_DATE_GET = '[FM,MB_DATE_G,1]'
 RESP_HW_SET = '[FM,HWVER_S,1]'
 RESP_HW_GET = '[FM,HWVER_G,1]'
 RESP_HW_VALUE = '[FM,HWVER_R,'
 RESP_LED_C = '[FM,LED_C,1]'
+RESP_MB_UNLOCK = '[FM,MB_UNLOCK,1]'
+RESP_MB_COMMIT = '[FM,MB_COMMIT,1]'
+RESP_MB_10NC_SET = '[FM,MB_10NC_S,1]'
+RESP_MB_NAME_SET = '[FM,MB_NAME_S,1]'
+RESP_MB_10NC_GET = '[FM,MB_10NC_G,1]'
+RESP_MB_NAME_GET = '[FM,MB_NAME_G,1]'
+# RESP_MB_10NC_VAL = '[FM,MB_10NC_R,' + TEN_NC + ']'
+# RESP_MB_NAME_VAL = '[FM,MB_NAME_R,' + PRODUCT_NAME + ']'
+RESP_SW_REGIME_GET = '[FM,SW_REGIME_G,1]'
+RESP_LUX_GAIN_OFFSET_GET = '[FM,LUX_GAIN_G,1]'
 
 # BFT station
 VDC_C = '[FM,VDC_C]'
@@ -277,6 +304,8 @@ class AteProcess:
                 RecordMemory.update_item_xml('IMEI', self.imei)
                 RecordMemory.update_item_xml('Version', self.modem_hw_ver + self.modem_sw_ver)
                 RecordMemory.update_item_xml('UniqueId', self.ctcid)
+                RecordMemory.update_item_xml('FactoryFirmwareVersion', self.software_ver)
+                RecordMemory.update_item_xml('Serial', self.imei)
                 return True
             else:
                 return False
@@ -437,7 +466,57 @@ class AteProcess:
         return rst
 
 
-    def dali_tool_mem_set(self):
+    def dali_tool_mem_set(self, val, resp, tm_out):
+        rst = False
+
+        for retry in range(3):
+            self.send_cmd(val)
+            rst = self.check_response(resp, tm_out)
+            if rst:
+                break
+
+        return rst
+
+
+    def dali_tool_mem_get(self, val, resp, tm_out):
+        for retry in range(3):
+            self.send_cmd(val)
+            rst = self.get_response_value(resp, tm_out, True)
+            if rst != ERR_VALUE:
+                break
+
+        return rst
+
+
+    def dali_tool_lux_gain_offset_get(self, val, resp, tm_out):
+        self.send_cmd(val)
+        # clear message queue to avoid receive old data.
+        msg.queue.clear()
+
+        try:
+            value_response = msg.get(timeout=tm_out)
+        except:
+            print('queue empty\n')
+            return ERR_VALUE, ERR_VALUE
+
+        value_response = value_response.lstrip(SERIAL_ID).strip()
+        if resp == value_response:
+            try:
+                value_response = msg.get(timeout=tm_out)
+                # print('msg2 = ' + value_response)
+            except:
+                print('queue empty\n')
+                return ERR_VALUE, ERR_VALUE
+
+            value_response = value_response.strip(']' + '[')
+            rst = value_response.split(',')
+            return rst[2], rst[3]
+
+        else:
+            return ERR_VALUE, ERR_VALUE
+
+
+    def dali_tool_mem_test(self):
         rst = False
 
         # enter FT mode
@@ -455,7 +534,71 @@ class AteProcess:
         time.sleep(1)
         if rst:
             self.send_cmd(MB_UNLOCK)
-            result = self.check_response(RESP_FT_ON, 5)
+            result = self.check_response(RESP_MB_UNLOCK, 5)
+            if result:
+                rst = True
+            else:
+                rst = False
+
+        if rst:
+            rst = self.dali_tool_mem_set(MB_10NC_SET, RESP_MB_10NC_SET, 2)
+
+        if rst:
+            rst = self.dali_tool_mem_set(MB_NAME_SET, RESP_MB_NAME_SET, 2)
+
+        if rst:
+            PRODUCE_DATE = datetime.datetime.now().strftime("%Y%m%d")
+            MB_DATE_S = '[FM,MB_DATE_S,' + PRODUCE_DATE + ']'
+            rst = self.dali_tool_mem_set(MB_DATE_S, RESP_MB_DATE_SET, 2)
+
+        if rst:
+            rst = self.dali_tool_mem_set(MB_COMMIT, RESP_MB_COMMIT, 2)
+
+        if rst:
+            resp = self.dali_tool_mem_get(MB_10NC_GET, RESP_MB_10NC_GET, 2)
+            if resp == TEN_NC:
+                rst = True
+                RecordMemory.update_item_xml('CommercialDesignation', TEN_NC)
+            else:
+                rst = False
+
+        if rst:
+            resp = self.dali_tool_mem_get(MB_NAME_GET, RESP_MB_NAME_GET, 2)
+            if resp == PRODUCT_NAME:
+                rst = True
+                RecordMemory.update_item_xml('ProductName', PRODUCT_NAME)
+            else:
+                rst = False
+
+        if rst:
+            resp = self.dali_tool_mem_get(MB_DATE_GET, RESP_MB_DATE_GET, 2)
+            if resp != ERR_VALUE:
+                rst = True
+                RecordMemory.update_item_xml('ProductionDate', resp)
+            else:
+                rst = False
+
+        if rst:
+            resp = self.dali_tool_mem_get(MB_SW_REGIME_GET, RESP_SW_REGIME_GET, 2)
+            if resp != ERR_VALUE:
+                rst = True
+                RecordMemory.update_item_xml('SwitchRegime', resp)
+            else:
+                rst = False
+
+        if rst:
+            gain, offset = self.dali_tool_lux_gain_offset_get(LUX_GAIN_OFFSET_GET, RESP_LUX_GAIN_OFFSET_GET, 5)
+            if resp != ERR_VALUE:
+                rst = True
+                RecordMemory.update_item_xml('Lgain', gain)
+                RecordMemory.update_item_xml('Loffset', offset)
+
+        # .isocalendar has three members('(2023, 8, 5)') -- 'year, weeks, week-day'
+        week = datetime.datetime.now().isocalendar()[1]
+        RecordMemory.update_item_xml('ProductionWeek', week)
+
+        RecordMemory.update_item_xml('BrandName', 'Philips')
+        RecordMemory.update_item_xml('ProductionLocation', 'China')
 
         return rst
 
@@ -485,7 +628,7 @@ class AteProcess:
 
             return True
 
-        if 1:
+        if 0:
             rst = False
             self.send_cmd(VDC_C)
             if self.vdc_vedlc_check(v_resp=VDC_R, vcc_h=26000, vcc_l=23000, v_tmout=15):
@@ -495,3 +638,6 @@ class AteProcess:
                 rst = False
 
             return rst
+
+        if 1:
+            self.dali_tool_mem_test()

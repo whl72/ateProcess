@@ -64,9 +64,11 @@ class AteShell:
                     print('rf test success.\n')
                 else:
                     print('rf test fail.\n')
+                print('dali ate is finished.\n')
             elif cmd == 'testate' or cmd == 'TESTATE':
                 print('start test ate.\n')
                 AteProcess().test_func()
+                print('dali ate is finished.\n')
             elif cmd == '':
                 print("shell.")
             else:
